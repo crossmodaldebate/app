@@ -15,6 +15,7 @@ import os
 import dask.dataframe as dd
 import dask.array as da
 from google.colab import drive
+from sklearn.utils import resample
 
 # Autenticação e montagem do Google Drive
 drive.mount('/content/drive')
@@ -31,6 +32,7 @@ FIGSIZE = (10, 6)
 PALETTE = 'coolwarm'
 BACKGROUND_COLOR = 'black'
 TEXT_COLOR = 'white'
+BOOTSTRAP_SAMPLES = 1000
 
 # Função para salvar gráficos em alta qualidade no Google Drive
 def save_fig(filename, graphpath):
@@ -38,6 +40,15 @@ def save_fig(filename, graphpath):
     plt.savefig(filepath, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"Gráfico salvo em {filepath}")
+
+# Função para realizar o bootstrap e retornar um DataFrame com os dados amostrados
+def bootstrap_data(df, n_iterations=BOOTSTRAP_SAMPLES):
+    bootstrapped_dfs = []
+    for i in range(n_iterations):
+        bootstrapped_df = resample(df.compute(), replace=True)
+        bootstrapped_dfs.append(bootstrapped_df)
+    bootstrapped_df = pd.concat(bootstrapped_dfs)
+    return dd.from_pandas(bootstrapped_df, npartitions=4)
 
 # Classe para gerar gráficos, incluindo regressões polinomiais
 class GraphGenerator:
@@ -158,8 +169,14 @@ def main():
     df = load_data(SPREADSHEET_URL)
 
     if df is not None:
-        generate_statistical_summary(df, summarypath)
-        graph_gen = GraphGenerator(df, graphpath)
+        # Realiza o bootstrap nos dados
+        bootstrapped_df = bootstrap_data(df)
+
+        # Gera o sumário estatístico
+        generate_statistical_summary(bootstrapped_df, summarypath)
+
+        # Inicializa o gerador de gráficos com os dados amostrados
+        graph_gen = GraphGenerator(bootstrapped_df, graphpath)
 
         # Gráficos de regressão polinomial
         regression_plots = [
